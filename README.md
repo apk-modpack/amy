@@ -13,6 +13,7 @@ Si estás leyendo esto como agente Antigravity, este README es tu **mapa de entr
 |---|---|
 | [`docs/ANTIGRAVITY_SYSTEM_PROMPT.md`](docs/ANTIGRAVITY_SYSTEM_PROMPT.md) | Reglas operativas: cuándo y cómo leer/escribir la wiki |
 | [`docs/ANTIGRAVITY_INTEGRATION_GUIDE.md`](docs/ANTIGRAVITY_INTEGRATION_GUIDE.md) | Catálogo de herramientas MCP y protocolos de uso |
+| [`docs/GIT_REPOSITORY_GUIDE.md`](docs/GIT_REPOSITORY_GUIDE.md) | Guía del repositorio Git, políticas de `.gitignore` y sincronización con GitHub |
 | [`docs/FINE_TUNING_GUIDE.md`](docs/FINE_TUNING_GUIDE.md) | Guía detallada de fine-tuning: propósitos de FT1, FT2 y FT3 y pipeline acumulativo |
 | [`docs/ENVIRONMENTS_AND_SYNC.md`](docs/ENVIRONMENTS_AND_SYNC.md) | Guía de entornos duales (`SAUCE\IA` vs `E:\IA`) y sincronización de código |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Diagrama y descripción de todos los componentes |
