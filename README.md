@@ -20,6 +20,7 @@ Si estás leyendo esto como agente Antigravity, este README es tu **mapa de entr
 | [`docs/VISION_AND_PHILOSOPHY.md`](docs/VISION_AND_PHILOSOPHY.md) | Por qué existe este sistema y qué lo diferencia |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Estado actual de desarrollo y fases completadas |
 | [`docs/DATASET_STANDARD.md`](docs/DATASET_STANDARD.md) | Estándar de nombres y flujo de datasets acumulativos |
+| [`CHANGELOG.md`](CHANGELOG.md) | Registro histórico de cambios e hitos por cada iteración del proyecto |
 | [`config.yaml`](config.yaml) | Configuración activa del sistema (backend, LLM, búsqueda) |
 
 ---

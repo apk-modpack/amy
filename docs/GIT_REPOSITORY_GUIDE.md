@@ -86,3 +86,4 @@ git pull origin main
 ## 4. Replicación al Entorno de Pruebas (`E:\IA`)
 
 Recuerda que tras hacer cambios y confirmar en Git en el entorno de desarrollo, se deben sincronizar los archivos de código fuente y documentación con el entorno de pruebas `E:\IA` siguiendo la [Guía de Entornos](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/docs/ENVIRONMENTS_AND_SYNC.md).
+
