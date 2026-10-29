@@ -1,0 +1,31 @@
+# ConfiguraciÃ³n del Sistema Wiki-Memory Agent
+wiki:
+  backend: "local_xml"  # Opciones: "local_xml" (por defecto), "local_markdown" (heredado)
+  local_path: "./data/wiki"
+  default_category: "General"
+  auto_create_links: true
+
+retrieval:
+  search_limit: 10
+  fuzzy_threshold: 0.6
+
+export:
+  default_format: "sharegpt" # Opciones: "sharegpt", "alpaca", "jsonl_qa"
+  output_dir: "./data/exports"
+
+# Configuración del agente autónomo (modo standalone sin Antigravity)
+llm:
+  provider: "llamacpp"                  # "llamacpp" = portátil sin Ollama | "ollama" = requiere Ollama instalado
+  model_path: "./models/llama3.2-finetuning-v0.3.gguf"       # Ruta al fichero GGUF (relativa al directorio de ejecución)
+  temperature: 1.5                      # Temperatura del modelo (del Modelfile original)
+  min_p: 0.1                            # Filtro min_p (del Modelfile original)
+  n_ctx: 4096                           # Tamaño del contexto en tokens
+  n_gpu_layers: 0                       # 0=CPU puro | -1=GPU completa si tienes CUDA/Metal
+  stream: true                          # Streaming de tokens en terminal
+  context_concepts: 3                   # Nº de conceptos wiki a inyectar por turno
+
+  # --- Configuración alternativa con Ollama (descomentar si se prefiere) ---
+  # provider: "ollama"
+  # model: "llama3.2-finetuned"
+  # base_url: "http://localhost:11434"
+  # temperature: 0.3

@@ -1,0 +1,12 @@
+﻿{
+  "mcpServers": {
+    "wiki-memory": {
+      "command": "python",
+      "args": ["-m", "wiki_agent.mcp_server"],
+      "cwd": "C:/Users/ENEKO/Desktop/SAUCE/IA",
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

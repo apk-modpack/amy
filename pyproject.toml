@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki-agent-system"
+version = "0.1.0"
+description = "Sistema de Agente IA con Memoria Conceptual y Base de Conocimientos en Wiki"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "mcp>=1.0.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "httpx>=0.25.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[project.optional-dependencies]
+# Backend local portátil: inferencia directa sobre GGUF sin Ollama
+local = [
+    "llama-cpp-python>=0.2.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+wiki-agent = "wiki_agent.cli:main"
+wiki-mcp = "wiki_agent.mcp_server:run_server"
+
+[tool.setuptools.packages.find]
+where = ["src"]
