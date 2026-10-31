@@ -577,6 +577,8 @@ def chat(model: Optional[str], no_memory: bool, url: Optional[str],
     finally:
         if network_client and network_client.is_connected:
             network_client.disconnect()
+        if hasattr(llm, "shutdown"):
+            llm.shutdown()
 
 
 @main.command(name="chat-room")

@@ -63,10 +63,35 @@ class LlamaCppBackend(LLMBackend):
             self._model_path, self._embedded_bin.exists(), n_ctx
         )
 
+    def _kill_existing_server_on_port(self):
+        """Si ya existe un proceso escuchando en el puerto configurado, lo termina para evitar usar instancias huérfanas o con flags obsoletos."""
+        try:
+            out = subprocess.check_output(["netstat", "-ano", "-p", "tcp"], stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
+            target_suffix = f":{self.port}"
+            for line in out.splitlines():
+                if target_suffix in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    pid = int(parts[-1])
+                    if pid > 0:
+                        logger.warning("Terminando proceso previo huérfano (PID %d) en puerto %d...", pid, self.port)
+                        try:
+                            if os.name == "nt":
+                                subprocess.run(["taskkill", "/F", "/PID", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            else:
+                                os.kill(pid, 9)
+                        except Exception as e:
+                            logger.debug("No se pudo terminar PID %d: %s", pid, e)
+            time.sleep(0.5)
+        except Exception as e:
+            logger.debug("Error verificando procesos previos en puerto %d: %s", self.port, e)
+
     def _ensure_server_running(self):
         """Asegura que el servidor portátil local está iniciado y el modelo cargado."""
-        if self._is_server_healthy():
+        if self._is_server_healthy() and self._server_process is not None:
             return
+
+        # Si hay un servidor huérfano escuchando en el puerto pero no lo iniciamos nosotros, cerrarlo
+        self._kill_existing_server_on_port()
 
         if not self._model_path.exists():
             raise FileNotFoundError(f"Fichero GGUF no encontrado: {self._model_path}")
