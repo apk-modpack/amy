@@ -52,7 +52,7 @@ class LlamaCppBackend(LLMBackend):
         self.base_url = f"http://127.0.0.1:{self.port}"
 
         self._server_process: Optional[subprocess.Popen] = None
-        self._client = httpx.Client(base_url=self.base_url, timeout=120.0)
+        self._client = httpx.Client(base_url=self.base_url, timeout=300.0)
 
         # Buscar binario local embebido
         self._project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -78,6 +78,7 @@ class LlamaCppBackend(LLMBackend):
             "-m", str(self._model_path),
             "--port", str(self.port),
             "-c", str(self.n_ctx),
+            "-np", "1",
             "--jinja",
         ]
 
@@ -104,12 +105,12 @@ class LlamaCppBackend(LLMBackend):
         raise TimeoutError("El motor local llama-server no respondió a tiempo durante la carga del modelo.")
 
     def _is_server_healthy(self) -> bool:
-        """Verifica si el servidor local ya está escuchando y listo."""
+        """Verifica si el servidor local ya está escuchando y listo (status 'ok')."""
         try:
             resp = self._client.get("/health", timeout=1.5)
             if resp.status_code == 200:
                 data = resp.json()
-                return data.get("status") in ("ok", "loading model")
+                return data.get("status") == "ok"
             return False
         except Exception:
             return False
@@ -167,7 +168,7 @@ class LlamaCppBackend(LLMBackend):
         full_response = []
         bytes_received = 0
 
-        with self._client.stream("POST", "/v1/chat/completions", json=payload, timeout=120.0) as response:
+        with self._client.stream("POST", "/v1/chat/completions", json=payload, timeout=300.0) as response:
             if response.status_code != 200:
                 raise RuntimeError(f"Error HTTP del servidor portable: {response.status_code}")
 
@@ -198,7 +199,7 @@ class LlamaCppBackend(LLMBackend):
         return "".join(full_response)
 
     def _chat_blocking(self, payload: Dict[str, Any]) -> str:
-        resp = self._client.post("/v1/chat/completions", json=payload, timeout=120.0)
+        resp = self._client.post("/v1/chat/completions", json=payload, timeout=300.0)
         if resp.status_code != 200:
             raise RuntimeError(f"Error HTTP del servidor portable: {resp.status_code}")
         data = resp.json()

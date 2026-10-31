@@ -120,15 +120,17 @@ def make_agent_response(text: str, metadata: Optional[Dict[str, Any]] = None) ->
     )
 
 
-def make_agent_status(state: "AgentState | str", detail: str = "") -> NetworkMessage:
+def make_agent_status(state: "AgentState | str" = None, detail: str = "", status: "AgentState | str" = None) -> NetworkMessage:
     """Crea un mensaje de actualización de estado del agente.
 
     Args:
         state: Estado formal del agente (AgentState.LISTO / PROCESANDO / ERROR).
                También se acepta string crudo para compatibilidad hacia atrás.
         detail: Descripción opcional con contexto adicional (ej. 'Ciclo 2 de razonamiento').
+        status: Alias de conveniencia retrocompatible para 'state'.
     """
-    state_value = state.value if isinstance(state, AgentState) else str(state)
+    actual_state = state if state is not None else status
+    state_value = actual_state.value if isinstance(actual_state, AgentState) else str(actual_state or "")
     return NetworkMessage(
         type=MessageType.AGENT_STATUS,
         payload={"state": state_value, "detail": detail}

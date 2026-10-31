@@ -96,7 +96,7 @@ class AgentNetworkClient:
         """Transmite una actualización de estado de la IA a la Sala de Chat."""
         if not self._conn or self._conn.is_closed:
             return False
-        msg = make_agent_status(status=status, detail=detail)
+        msg = make_agent_status(state=status, detail=detail)
         return self._conn.send_message(msg)
 
     def send_state(self, state: AgentState, detail: str = "") -> bool:
