@@ -2,14 +2,18 @@
 
 Estándar de Nombres:
   - Parciales:
-      data/exports/dataset_ft1_cli_standards.jsonl  (Estándares CLI y micro-formato XML)
-      data/exports/dataset_ft2_agent_react.jsonl    (Razonamiento Agente ReAct / Multi-ciclos)
+      data/exports/dataset_ft1_cli_standards.jsonl     (Estándares CLI y micro-formato XML)
+      data/exports/dataset_ft2_agent_react.jsonl       (Razonamiento Agente ReAct / Multi-ciclos)
+      data/exports/dataset_ft3_structured_saves.jsonl  (Guardado estructurado y corrección de fallos)
+      data/exports/dataset_ft4_multiagent.jsonl        (Protocolo multi-agente e identidad)
+      data/exports/dataset_ft5_tasklist.jsonl          (Lista de tareas cognitivas y loop multi-ciclo)
+      data/exports/dataset_ft6_wiki_grounding.jsonl    (Wiki-grounding y menor dependencia de contexto)
   - Acumulativos para Fine-Tuning:
-      data/exports/dataset_cumulative_v2.jsonl      (FT1 + FT2 consolidado)
+      data/exports/dataset_cumulative_v6.jsonl         (FT1 a FT6 consolidado - 600 ejemplos)
 
 Uso:
     python build_cumulative_dataset.py
-    python build_cumulative_dataset.py --output dataset_cumulative_v3.jsonl --add-file nuevo_dataset.jsonl
+    python build_cumulative_dataset.py --output dataset_cumulative_v6.jsonl --add-file nuevo_dataset.jsonl
 """
 
 import sys
@@ -28,6 +32,9 @@ from wiki_agent.tools.dataset_manager import CumulativeDatasetBuilder
 import generate_ft1_dataset
 import generate_agent_dataset
 import generate_ft3_dataset
+import generate_ft4_multiagent_dataset
+import generate_ft5_tasklist_dataset
+import generate_ft6_wiki_grounding_dataset
 
 
 def main():
@@ -36,8 +43,8 @@ def main():
     )
     parser.add_argument(
         "--output", "-o",
-        default="dataset_cumulative_v3.jsonl",
-        help="Nombre del archivo de salida acumulativo (default: dataset_cumulative_v3.jsonl)"
+        default="dataset_cumulative_v6.jsonl",
+        help="Nombre del archivo de salida acumulativo (default: dataset_cumulative_v6.jsonl)"
     )
     parser.add_argument(
         "--output-dir", "-d",
@@ -83,7 +90,28 @@ def main():
     if ft3_file.exists():
         input_files.append(ft3_file)
 
-    # 4. Archivos adicionales especificados por parámetro
+    # 4. Generar Dataset FT4: Interacción Inter-Agente y Remitente HUMAN
+    print("\n4. Generando/Verificando Dataset FT4: Protocolo inter-agente y remitente HUMAN...")
+    ft4_file = out_dir / "dataset_ft4_multiagent.jsonl"
+    generate_ft4_multiagent_dataset.main()
+    if ft4_file.exists():
+        input_files.append(ft4_file)
+
+    # 5. Generar Dataset FT5: Lista de Tareas Cognitivas y Planificación Multi-paso
+    print("\n5. Generando/Verificando Dataset FT5: Lista de tareas cognitivas y planificación...")
+    ft5_file = out_dir / "dataset_ft5_tasklist.jsonl"
+    generate_ft5_tasklist_dataset.main()
+    if ft5_file.exists():
+        input_files.append(ft5_file)
+
+    # 6. Generar Dataset FT6: Wiki-Grounding y Menor Dependencia de Contexto
+    print("\n6. Generando/Verificando Dataset FT6: Wiki-Grounding y menor dependencia de contexto...")
+    ft6_file = out_dir / "dataset_ft6_wiki_grounding.jsonl"
+    generate_ft6_wiki_grounding_dataset.main()
+    if ft6_file.exists():
+        input_files.append(ft6_file)
+
+    # 7. Archivos adicionales especificados por parámetro
     for extra in args.add_file:
         p = Path(extra)
         if p.exists():
@@ -92,8 +120,8 @@ def main():
         else:
             print(f"   [AVISO] Archivo no encontrado: {p}")
 
-    # 5. Fusión y normalización acumulativa
-    print("\n3. Consolidando y deduplicando datasets bajo el estándar acumulativo...")
+    # 8. Fusión y normalización acumulativa
+    print("\n7. Consolidando y deduplicando datasets bajo el estándar acumulativo...")
     builder = CumulativeDatasetBuilder(output_dir=out_dir)
     final_path, stats = builder.merge_datasets(
         input_files=input_files,

@@ -7,6 +7,8 @@ from wiki_agent.core.assistant import WikiAssistantEngine
 from wiki_agent.agent.parser import AgentResponseParser
 from wiki_agent.agent.commands import CommandDispatcher
 from wiki_agent.agent.xml_extractor import ConceptXmlExtractor
+from wiki_agent.agent.identity import AgentIdentityManager
+from wiki_agent.agent.task_list import AgentTaskManager
 from wiki_agent.domain import (
     CognitiveAgent,
     ConversationHistory,
@@ -21,10 +23,12 @@ SYSTEM_PROMPT = """Eres un agente IA con memoria conceptual persistente almacena
 
 REGLAS DE IDENTIDAD Y MEMORIA WIKI (¡CRÍTICAS!):
 - La "MEMORIA WIKI" que se inyecta ES TU MEMORIA REAL Y ABSOLUTA. Usa toda la información en ella como tu propio conocimiento.
+- WIKI-GROUNDING Y DESCONFIANZA DE MEMORIA PARAMÉTRICA: Tu contexto conversacional es efímero y tu memoria interna puede alucinar. Tu única fuente fidedigna y permanente es la Wiki. Para datos fácticos, configuraciones, protocolos o políticas del sistema: NO respondas asumiendo de memoria; consulta primero la wiki con `/search` o `/read` si el concepto no está ya en la MEMORIA WIKI inyectada.
+- PERSISTENCIA PROACTIVA (CONTEXT OFFLOADING): Si el usuario o un agente par aporta información nueva, reglas, configuraciones o decisiones técnicas críticas durante la conversación, NO confíes en recordarlo en el historial volátil de chat. Descarga y persiste el conocimiento inmediatamente en la wiki mediante `/save` o `/edit`.
 - Si en la MEMORIA WIKI aparecen definiciones principales y conceptos relacionados con sus definiciones e indentaciones (navegación en profundidad / depth), YA TIENES la información completa. ¡ESTÁ TERMINANTEMENTE PROHIBIDO ejecutar `/search` sobre conceptos que ya están descritos en la MEMORIA WIKI! Responde directamente al usuario sintetizando dicho conocimiento.
 - NUNCA digas "según los registros de la wiki" o "no tengo información en mi sistema". Habla en primera persona y de forma asertiva.
 - SOLO si la memoria está realmente vacía o no contiene el concepto solicitado, usa `/search` o indica que no tienes el dato.
-- Cuando uses un concepto de la Wiki, referencíalo con [[Nombre_del_Concepto]].
+- Cuando uses un concepto de la Wiki, referencíalo con [[Nombre_del_Concepto]]. Si encuentras enlaces [[Concepto]] relevantes que requieran profundización, navega hacia ellos con `/read` en lugar de especular.
 
 ESTRATEGIA COGNITIVA (AUTONOMÍA Y APRENDIZAJE):
 - CONSULTAS PURAMENTE INFORMATIVAS (¡MUY IMPORTANTE!):
@@ -42,6 +46,21 @@ En él, analiza paso a paso:
   2. Si es una consulta informativa y la información ya está en la MEMORIA WIKI: NO ejecutes ningún comando (/search, /save, /edit prohibidos). Sintetiza y responde directamente en <response>.
   3. Si falta información crucial que no está en la memoria, decide si usar /search o preguntar al usuario.
 
+PROCESO COGNITIVO Y LISTA DE TAREAS (<tasks>):
+- Si la solicitud es directa o simple y ya dispones de la información: responde directamente en <response> sin crear tareas.
+- Si la solicitud es compleja, requiere varios pasos (por ejemplo: buscar múltiples conceptos, comparar, sintetizar o reestructurar información):
+  Puedes declarar una lista de tareas estructurada en un bloque <tasks> al inicio:
+  <tasks>
+  - [ ] Paso 1: Buscar o contrastar concepto A
+  - [ ] Paso 2: Leer detalles de concepto B
+  - [ ] Paso 3: Sintetizar y responder al usuario
+  </tasks>
+  A medida que avances en los ciclos, puedes actualizar las tareas marcándolas como completadas ([x]) o usando comandos:
+  - `/task_add "Descripción"`: Añade una subtarea dinámica.
+  - `/task_done "1"` o `/task_done`: Marca la tarea actual o indicada como completada.
+  - `/task_list`: Muestra la lista de tareas actual.
+  Si quedan tareas pendientes en tu lista, el sistema te permitirá continuar razonando en el siguiente ciclo hasta completarlas todas.
+
 BUCLES DE RAZONAMIENTO Y COMANDOS (MULTI-CICLOS):
 - Tienes la capacidad de ejecutar comandos internos para interactuar con la wiki antes de responder.
 - Si necesitas acción o información extra, emite el comando en <commands>. El sistema lo ejecutará y te devolverá [RESULTADO COMANDO].
@@ -56,6 +75,9 @@ COMANDOS DISPONIBLES:
 - `/save "Título"`: Guarda NUEVO concepto cuando el usuario proporciona datos nuevos o lo solicita explícitamente.
 - `/edit "Título"`: Modifica concepto EXISTENTE cuando hay información nueva que agregar o corregir.
 - `/delete "Título"`: Elimina un concepto duplicado o irrelevante.
+- `/task_add "descripción"`: Añade una tarea a la lista de tareas cognitiva.
+- `/task_done "índice/texto"`: Marca una tarea como completada.
+- `/task_list`: Consulta las tareas pendientes y completadas.
 
 FORMATO XML PARA GUARDAR CONCEPTOS CON RELACIONES:
 Cuando uses /save o /edit, el contenido de <response> DEBE estar estructurado con micro-etiquetas XML:
@@ -109,6 +131,8 @@ class WikiAgent(CognitiveAgent):
         self.parser = parser or AgentResponseParser()
         self.dispatcher = dispatcher or CommandDispatcher(self)
         self.xml_extractor = xml_extractor or ConceptXmlExtractor()
+        self.identity_manager = AgentIdentityManager()
+        self.task_manager = AgentTaskManager()
 
         # Historial de conversación como Aggregate de dominio
         self._history = ConversationHistory()
@@ -144,8 +168,9 @@ class WikiAgent(CognitiveAgent):
             status_callback(("wiki_tree", concepts_used))
 
         self._history.add_user_message(user_message)
+        self.task_manager.clear()
 
-        MAX_CYCLES = 5
+        MAX_CYCLES = 8
         cycles = 0
         final_human_response = ""
         commands_executed = []
@@ -169,6 +194,14 @@ class WikiAgent(CognitiveAgent):
             )
             self._history.add_assistant_message(response)
 
+            # Extracción de lista de tareas si el modelo define o actualiza <tasks>
+            tasks_found = self.parser.extract_tasks_block(response)
+            if tasks_found:
+                logger.info("TURNO %d | CICLO %d | Bloque <tasks> detectado con %d tareas", turn, cycles, len(tasks_found))
+                self.task_manager.set_tasks(tasks_found)
+                if status_callback:
+                    status_callback(("tasks_updated", self.task_manager.to_list()))
+
             # Extracción estructurada mediante parser POO
             thought_text, human_response, commands_list = self.parser.extract_components(response)
 
@@ -183,9 +216,22 @@ class WikiAgent(CognitiveAgent):
 
             logger.info("TURNO %d | CICLO %d | Comandos extraídos: %s", turn, cycles, commands_list)
 
-            # Si no hay comandos, verificar si en el ciclo previo se intentó guardar/editar
-            # y el modelo redactó la <definition> directamente en este ciclo
+            # Si no hay comandos:
+            # 1. Comprobar si hay tareas pendientes en la lista de tareas cognitiva
             if not commands_list:
+                if self.task_manager.has_pending_tasks:
+                    logger.info("TURNO %d | CICLO %d | Tareas cognitivas pendientes detectadas (%d). Continuando bucle.",
+                                turn, cycles, self.task_manager.pending_count)
+                    task_summary = self.task_manager.render_summary()
+                    # Inyectar estado de tareas como observación para continuar el proceso cognitivo
+                    self._history.add_tool_observation(
+                        f"[ESTADO LISTA DE TAREAS]\n{task_summary}\n"
+                        f"Aviso: Aún quedan tareas pendientes. Continúa ejecutando o completa tareas con /task_done."
+                    )
+                    continue
+
+                # 2. Si no hay comandos ni tareas pendientes, verificar si en el ciclo previo se intentó guardar/editar
+                # y el modelo redactó la <definition> directamente en este ciclo
                 if last_attempted_save_concept and "<definition>" in human_response:
                     logger.info("Auto-actualizando concepto '%s' con definición final estructurada.", last_attempted_save_concept)
                     save_res = self.save_last_response(last_attempted_save_concept)
@@ -296,6 +342,18 @@ class WikiAgent(CognitiveAgent):
     def turn_count(self) -> int:
         """Número de turnos completados en la sesión actual."""
         return self._history.turn_count
+
+    def get_or_create_identity(self) -> Dict[str, Any]:
+        """Obtiene la identidad actual del agente o crea una si no existe."""
+        return self.identity_manager.load_or_create()
+
+    @property
+    def agent_name(self) -> str:
+        return self.identity_manager.agent_name
+
+    @property
+    def agent_id(self) -> str:
+        return self.identity_manager.agent_id
 
     def _retrieve_wiki_context(self, query: str) -> Tuple[str, List[str]]:
         """Busca en la Wiki los conceptos más relevantes para la query."""

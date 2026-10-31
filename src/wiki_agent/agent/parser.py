@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 class AgentResponseParser:
     """Parsea respuestas del modelo y sanea el texto para el usuario final."""
 
-    VALID_COMMAND_PREFIXES = ("/save ", "/edit ", "/search ", "/read ", "/delete ")
+    VALID_COMMAND_PREFIXES = (
+        "/save ", "/edit ", "/search ", "/read ", "/delete ",
+        "/task_add ", "/task_done", "/task_list"
+    )
 
     RE_THOUGHT = re.compile(
         r'(?:<thought>|\[PENSAMIENTO INTERNO\])(.*?)(?:</thought>|\[/PENSAMIENTO INTERNO\])',
@@ -26,10 +29,23 @@ class AgentResponseParser:
         re.DOTALL | re.IGNORECASE
     )
 
+    RE_TASKS = re.compile(
+        r'<tasks>(.*?)</tasks>',
+        re.DOTALL | re.IGNORECASE
+    )
+
     RE_RESPONSE = re.compile(
         r'(?:<response>|\[RESPONSE\]|\[RESPUESTA AUTÓNOMA\])(.*?)(?:</response>|\[COMANDOS\]|\[COMMANDS\]|<commands>|$)',
         re.DOTALL | re.IGNORECASE
     )
+
+    def extract_tasks_block(self, raw_response: str) -> List[str]:
+        """Extrae la lista de tareas declaradas en el bloque <tasks>...</tasks>."""
+        match = self.RE_TASKS.search(raw_response)
+        if not match:
+            return []
+        lines = [line.strip().lstrip("-*•0123456789. ") for line in match.group(1).split("\n")]
+        return [l for l in lines if l]
 
     def extract_components(self, raw_response: str) -> Tuple[str, str, List[str]]:
         """Extrae (thought_text, human_response, commands_list) de la respuesta cruda del LLM.

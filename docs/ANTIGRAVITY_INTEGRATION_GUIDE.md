@@ -12,7 +12,7 @@ Cuando el usuario haga preguntas sobre temas técnicos, proyectos o conceptos:
 ## 2. Protocolo de Guardado y Actualización de Conocimiento
 Cuando el usuario explique un concepto nuevo, comparta decisiones de diseño o pida memorizar información:
 1. **Estructuración**: No guardar texto plano desorganizado. Formatear con títulos, listas claras y enlaces `[[Concepto Relacionado]]`.
-2. **Categorización**: Asignar una categoría clara (ej. `Arquitectura`, `Frontend`, `Backend`, `Modelos_IA`, `Ideas`).
+2. **Categorización**: Asignar una categoría clara (ej. `Arquitectura`, `Frontend`, `Backend`, `Modelos_IA`, `Ideas`, `Red`).
 3. **Etiquetado**: Incluir tags temáticas relevantes en `tags`.
 4. **Actualización vs Creación**:
    - Si el concepto **no existe**: Usar `wiki_save_concept(title, content, category, tags)`.
@@ -44,8 +44,15 @@ Cuando el usuario explique un concepto nuevo, comparta decisiones de diseño o p
 
 ## 4. Convenciones de Enlaces
 - Usar siempre doble corchete: `[[Nombre Del Concepto]]`.
-- Mantener nombres de conceptos en formato legible (ej. `[[Redes Neuronales]]`, `[[Servidor MCP]]`).
+- Mantener nombres de conceptos en formato legible (ej. `[[Redes Neuronales]]`, `[[Servidor MCP]]`, `[[Sala de Chat]]`).
 - Si un concepto enlazado aún no tiene página propia, se considera un nodo pendiente ("stub") que podrá crearse en el futuro.
 
 ## 5. Backend de Almacenamiento
 El sistema utiliza el backend `local_xml` como formato principal. Los conceptos se almacenan como ficheros XML con Frontmatter YAML en `data/wiki/<Categoria>/<Titulo>.xml`.
+
+## 6. Modos de Operación del Agente
+El agente local (`wiki-agent chat`) puede iniciarse en dos modos:
+- **Modo LOCAL**: entrada por teclado. Comportamiento habitual sin configuración adicional.
+- **Modo RED**: el agente se conecta a una **Sala de Chat GUI** (`wiki-agent chat-room`) que actúa de interfaz gráfica para el usuario. El agente recibe inputs desde la red y envía respuestas de vuelta. Este modo es transparente para las herramientas MCP y la memoria wiki: el comportamiento cognitivo del agente es idéntico en ambos casos.
+
+Para más detalles sobre la arquitectura de red, consulta [`docs/ARCHITECTURE.md`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/docs/ARCHITECTURE.md).

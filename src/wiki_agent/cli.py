@@ -414,13 +414,34 @@ def mcp():
 @click.option("--model", "-m", default=None, help="Modelo a usar (sobreescribe config.yaml).")
 @click.option("--no-memory", "no_memory", is_flag=True, help="Desactiva la inyección de contexto Wiki.")
 @click.option("--url", default=None, help="URL de la API (solo aplica al provider 'ollama').")
-def chat(model: Optional[str], no_memory: bool, url: Optional[str]):
+@click.option(
+    "--connect", "-c", "chat_room_host", default=None,
+    help="IP o hostname de la Sala de Chat a la que conectarse (activa modo red)."
+)
+@click.option(
+    "--port", "-p", "chat_room_port", default=8765, show_default=True,
+    help="Puerto de la Sala de Chat (solo con --connect)."
+)
+def chat(model: Optional[str], no_memory: bool, url: Optional[str],
+         chat_room_host: Optional[str], chat_room_port: int):
     """Inicia una sesión de chat interactiva usando la Wiki como memoria.
+
+    \b
+    Modos de operación:
+      Sin --connect: entrada por teclado (modo local original).
+      Con --connect <IP>: recibe inputs desde la Sala de Chat remota (modo red).
+
+    \b
+    Ejemplos:
+      wiki-agent chat
+      wiki-agent chat --connect 192.168.1.10
+      wiki-agent chat --connect 192.168.1.10 --port 9000
 
     \b
     Comandos especiales durante el chat:
       /save <título>    Guarda la última respuesta como concepto en la Wiki
       /clear            Limpia el historial de la sesión actual
+      /stats            Muestra métricas de la sesión
       /exit o /quit     Termina el chat
       /help             Muestra esta ayuda
     """
@@ -439,13 +460,58 @@ def chat(model: Optional[str], no_memory: bool, url: Optional[str]):
 
     llm = get_llm_backend({"llm": llm_cfg})
 
+    # Si no se proporcionó host, preguntar interactivamente si el usuario quiere conectarse
+    network_client = None
+    if chat_room_host is None:
+        console.print()
+        console.print(Panel(
+            "[bold cyan]Modo de entrada[/bold cyan]\n\n"
+            "Puedes operar en modo local (entrada por teclado) o conectarte\n"
+            "a una [bold]Sala de Chat[/bold] que actúe como interfaz gráfica.\n\n"
+            "[dim]Deja vacío para modo local. Escribe una IP para modo red.[/dim]",
+            title="🌐 Wiki-Memory Agent — Configuración de Entrada",
+            border_style="cyan"
+        ))
+        raw = input("  IP de la Sala de Chat [Enter = modo local]: ").strip()
+        if raw:
+            chat_room_host = raw
+
+    # Si hay host (manual o por flag), activar modo red
+    if chat_room_host:
+        from wiki_agent.network.client import AgentNetworkClient
+        from wiki_agent.agent.identity import AgentIdentityManager
+        ident = AgentIdentityManager()
+        console.print(f"\n[dim]Conectando con la Sala de Chat en [cyan]{chat_room_host}:{chat_room_port}[/cyan] como [bold]{ident.agent_name}[/bold]...[/dim]")
+        network_client = AgentNetworkClient(
+            host=chat_room_host,
+            port=chat_room_port,
+            model_name=llm.model_name,
+            client_name=ident.agent_name,
+            client_id=ident.agent_id,
+        )
+        try:
+            network_client.connect()
+            console.print(f"[bold green]✓ Conectado a la Sala de Chat ({chat_room_host}:{chat_room_port})[/bold green]")
+        except Exception as e:
+            console.print(Panel(
+                f"[bold red]No se pudo conectar con la Sala de Chat.[/bold red]\n\n"
+                f"IP: [cyan]{chat_room_host}[/cyan] · Puerto: [cyan]{chat_room_port}[/cyan]\n\n"
+                f"Error: {e}\n\n"
+                f"[dim]¿Está la Sala de Chat iniciada? Abre primero [yellow]iniciar_sala_de_chat.bat[/yellow].[/dim]",
+                title="❌ Error de Conexión",
+                border_style="red"
+            ))
+            return
+
     logger.info(
-        "SESIÓN CHAT INICIADA | Modelo: %s | URL: %s | no_memory: %s | stream: %s | context_concepts: %s",
+        "SESIÓN CHAT INICIADA | Modelo: %s | URL: %s | no_memory: %s | stream: %s | "
+        "context_concepts: %s | modo: %s",
         llm.model_name,
         getattr(llm, 'base_url', 'N/A'),
         no_memory,
         llm_cfg.get('stream', True),
-        0 if no_memory else llm_cfg.get('context_concepts', 3)
+        0 if no_memory else llm_cfg.get('context_concepts', 3),
+        "NETWORK" if network_client else "LOCAL"
     )
 
     # --- Banner de inicio y verificación de backend ---
@@ -480,6 +546,8 @@ def chat(model: Optional[str], no_memory: bool, url: Optional[str]):
                 title="❌ Error de conexión Ollama",
                 border_style="red"
             ))
+        if network_client:
+            network_client.disconnect()
         return
 
     logger.info("SESIÓN CHAT | Backend LLM verificado correctamente. Provider: %s", provider)
@@ -501,8 +569,45 @@ def chat(model: Optional[str], no_memory: bool, url: Optional[str]):
         renderer=renderer,
         console=console,
         no_memory=no_memory,
+        network_client=network_client,
     )
-    session.start()
+
+    try:
+        session.start()
+    finally:
+        if network_client and network_client.is_connected:
+            network_client.disconnect()
+
+
+@main.command(name="chat-room")
+@click.option(
+    "--port", "-p", default=8765, show_default=True,
+    help="Puerto TCP en el que escucha la Sala de Chat."
+)
+def chat_room_cmd(port: int):
+    """Inicia la Sala de Chat (interfaz gráfica con ventana).
+
+    \b
+    La Sala de Chat es el programa servidor que muestra la interfaz gráfica
+    donde el usuario escribe mensajes y recibe respuestas del Agente IA.
+
+    \b
+    Flujo de uso:
+      1. Ejecuta este comando primero: wiki-agent chat-room
+      2. En otra terminal, inicia el agente: wiki-agent chat --connect <IP>
+    """
+    try:
+        from wiki_agent.chat_room import run_chat_room
+        console.print(f"[bold cyan]Iniciando Sala de Chat en puerto {port}...[/bold cyan]")
+        run_chat_room(port=port)
+    except ImportError as e:
+        console.print(Panel(
+            f"[bold red]Error al importar la Sala de Chat.[/bold red]\n\n"
+            f"Asegúrate de tener tkinter disponible (viene con Python estándar).\n\n"
+            f"Detalle: {e}",
+            title="❌ Error",
+            border_style="red"
+        ))
 
 
 if __name__ == "__main__":

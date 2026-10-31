@@ -51,17 +51,24 @@ Cada vez que se introduzcan cambios en la lógica del agente, herramientas o gen
 ### Comando de Sincronización de Código (PowerShell / Robocopy)
 
 ```powershell
-# Sincronizar código fuente sin tocar temporales
+# Sincronizar código fuente sin tocar temporales (incluye el nuevo módulo network/)
 robocopy "C:\Users\ENEKO\Desktop\SAUCE\IA\src" "E:\IA\src" /E /XO /XD "__pycache__" ".pytest_cache"
+
+# Sincronizar tests (incluye los nuevos tests de red)
+robocopy "C:\Users\ENEKO\Desktop\SAUCE\IA\tests" "E:\IA\tests" /E /XO /XD "__pycache__"
 
 # Sincronizar generadores raíz y configuración principal
 Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\config.yaml" "E:\IA\config.yaml" -Force
 Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\build_cumulative_dataset.py" "E:\IA\build_cumulative_dataset.py" -Force
 Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\generate_*.py" "E:\IA\" -Force
 
+# Sincronizar launchers (incluye los nuevos .bat de la Sala de Chat)
+Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\*.bat" "E:\IA\" -Force
+
 # Sincronizar documentación
 robocopy "C:\Users\ENEKO\Desktop\SAUCE\IA\docs" "E:\IA\docs" /E /XO
 Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\README.md" "E:\IA\README.md" -Force
+Copy-Item "C:\Users\ENEKO\Desktop\SAUCE\IA\CHANGELOG.md" "E:\IA\CHANGELOG.md" -Force
 ```
 
 ---
@@ -74,3 +81,8 @@ Cuando se genera un nuevo `.gguf` cuantizado:
 3. Actualizar la clave `llm.model_path` en `config.yaml` de ambos entornos.
 4. Actualizar la ruta por defecto en [`src/wiki_agent/llm/__init__.py`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/src/wiki_agent/llm/__init__.py).
 
+---
+
+## 5. Nota sobre la Sala de Chat y el Entorno de Red
+
+El módulo `src/wiki_agent/network/` y la Sala de Chat (`src/wiki_agent/chat_room.py`) funcionan en ambos entornos sin configuración adicional. La Sala de Chat detecta automáticamente las IPs de red disponibles en el equipo en que se ejecuta. Si la Sala de Chat y el Agente se ejecutan en equipos distintos, asegúrate de que el puerto `8765` (configurable con `--port`) está accesible entre ambos equipos.

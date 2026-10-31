@@ -76,6 +76,63 @@ class DeleteCommand(AgentCommand):
         return f"Éxito: {res}" if res.startswith("✓") else res
 
 
+class IdentifyCommand(AgentCommand):
+    """Verifica o crea la identidad del agente y devuelve su nombre e ID."""
+
+    def execute(self, argument: str) -> str:
+        identity = self.agent.get_or_create_identity()
+        name = identity.get("agent_name", "Desconocido")
+        aid = identity.get("agent_id", "Sin ID")
+        return f"Identificación del Agente:\n- Nombre: {name}\n- ID: {aid}\n- Rol: Agente IA (Wiki-Memory)"
+
+
+class TaskAddCommand(AgentCommand):
+    """Añade una tarea a la lista de tareas cognitiva del agente."""
+
+    def execute(self, argument: str) -> str:
+        task_desc = argument.strip().strip('"').strip("'")
+        if not task_desc:
+            return "Error: Comando /task_add requiere una descripción de tarea."
+        if hasattr(self.agent, "task_manager"):
+            self.agent.task_manager.add_task(task_desc)
+            return f"Tarea añadida: '{task_desc}'. Total pendientes: {self.agent.task_manager.pending_count}"
+        return "Error: Gestor de tareas no disponible en el agente."
+
+
+class TaskDoneCommand(AgentCommand):
+    """Marca una tarea como completada en la lista de tareas cognitiva."""
+
+    def execute(self, argument: str) -> str:
+        identifier = argument.strip().strip('"').strip("'")
+        if hasattr(self.agent, "task_manager"):
+            if identifier.isdigit():
+                idx = int(identifier)
+                ok = self.agent.task_manager.complete_task(idx)
+                if ok:
+                    return f"Tarea #{idx} marcada como completada. Restantes: {self.agent.task_manager.pending_count}"
+                return f"Error: No se encontró tarea con índice #{idx}"
+            elif identifier:
+                ok = self.agent.task_manager.complete_task(identifier)
+                if ok:
+                    return f"Tarea '{identifier}' marcada como completada. Restantes: {self.agent.task_manager.pending_count}"
+                return f"Error: No se encontró tarea que coincida con '{identifier}'"
+            else:
+                ok = self.agent.task_manager.complete_next()
+                if ok:
+                    return f"Siguiente tarea pendiente marcada como completada. Restantes: {self.agent.task_manager.pending_count}"
+                return "Aviso: No había tareas pendientes para completar."
+        return "Error: Gestor de tareas no disponible en el agente."
+
+
+class TaskListCommand(AgentCommand):
+    """Muestra el estado actual de la lista de tareas del agente."""
+
+    def execute(self, argument: str) -> str:
+        if hasattr(self.agent, "task_manager"):
+            return self.agent.task_manager.render_summary()
+        return "Error: Gestor de tareas no disponible en el agente."
+
+
 class CommandDispatcher:
     """Despachador orientado a objetos para comandos internos del agente."""
 
@@ -90,6 +147,10 @@ class CommandDispatcher:
         self.register("/save", SaveCommand(self.agent))
         self.register("/edit", EditCommand(self.agent))
         self.register("/delete", DeleteCommand(self.agent))
+        self.register("/identify", IdentifyCommand(self.agent))
+        self.register("/task_add", TaskAddCommand(self.agent))
+        self.register("/task_done", TaskDoneCommand(self.agent))
+        self.register("/task_list", TaskListCommand(self.agent))
 
     def register(self, command_name: str, handler: AgentCommand):
         """Registra un nuevo manejador para un comando."""

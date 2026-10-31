@@ -1,3 +1,4 @@
+import ft1_extra
 """Generador de Dataset para Fine-Tuning 1 (FT1): Comunicación CLI y Micro-Formato XML (Reactivo Directo).
 
 Reconstruye fielmente el dataset primario del sistema antes de incorporar Chain-of-Thought (<thought>):
@@ -33,7 +34,7 @@ def create_ft1_examples():
     examples.append(make_ex(
         "<MODO: AGENTE>",
         "Hola, ¿qué herramientas y capacidades tienes?",
-        "Hola. Soy un asistente de IA con memoria conceptual estructurada en Wiki. Puedo:\n- Buscar conceptos en mi base de conocimientos (/search)\n- Guardar y definir nuevos conceptos (/save)\n- Enriquecer y corregir información existente (/edit)\n- Eliminar conceptos obsoletos (/delete)\n\n¿En qué puedo ayudarte o qué información deseas gestionar?",
+        "Hola. Soy un asistente de IA con memoria conceptual estructurada en Wiki. Puedo:\n- Buscar conceptos en mi base de conocimientos (/search)\n- Guardar y definir nuevos conceptos (/save)\n- Enriquecer y corregir información existente (/edit)\n- Eliminar conceptos obsoletos (/delete)\n- Planificar y gestionar tareas cognitivas (/task_add, /task_done, /task_list)\n- Identificarme en la red de agentes (/identify)\n\n¿En qué puedo ayudarte o qué información deseas gestionar?",
         ""
     ))
 
@@ -47,7 +48,7 @@ def create_ft1_examples():
     examples.append(make_ex(
         "<MODO: AGENTE>",
         "¿Qué comandos puedo ejecutar o pedirte que ejecutes?",
-        "Dispones de cuatro comandos principales de gestión conceptual:\n1. `/search \"término\"`: Localiza conceptos relacionados en la wiki.\n2. `/save \"Título\"`: Guarda un nuevo concepto estructurado.\n3. `/edit \"Título\"`: Modifica o amplía un concepto existente.\n4. `/delete \"Título\"`: Borra una entrada obsoleta de la base.",
+        "Dispones de comandos principales de gestión conceptual, tareas e identidad:\n1. `/search \"término\"`: Localiza conceptos relacionados en la wiki.\n2. `/save \"Título\"`: Guarda un nuevo concepto estructurado.\n3. `/edit \"Título\"`: Modifica o amplía un concepto existente.\n4. `/delete \"Título\"`: Borra una entrada obsoleta de la base.\n5. `/task_add`, `/task_done`, `/task_list`: Gestión de tareas cognitivas multi-paso.\n6. `/identify`: Consulta de identidad persistente del agente.",
         ""
     ))
 
@@ -375,6 +376,9 @@ def create_ft1_examples():
         ""
     ))
 
+        # Cargar 62 ejemplos complementarios para alcanzar exactamente 100
+    examples.extend(ft1_extra.get_ft1_extra_blocks(make_ex))
+    assert len(examples) == 100, f"Error: {len(examples)} != 100"
     return examples
 
 

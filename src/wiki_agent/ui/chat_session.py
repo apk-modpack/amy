@@ -3,6 +3,10 @@
 Maneja el bucle de conversación con el usuario, la captura de comandos especiales
 de terminal (/stats, /tree, /save, /edit, /read, /delete, /clear, /exit, /help) y
 la coordinación con WikiAgent, ConsoleRenderer y TokenStreamProcessor.
+
+Soporta dos modos de entrada:
+  - LOCAL: entrada por teclado (modo por defecto, comportamiento original).
+  - NETWORK: entrada recibida desde la Sala de Chat remota a través de AgentNetworkClient.
 """
 
 from typing import Optional, Dict, Any
@@ -12,6 +16,7 @@ import logging
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
+from rich.panel import Panel
 
 from wiki_agent.agent.loop import WikiAgent
 from wiki_agent.core.manager import WikiKnowledgeManager
@@ -23,7 +28,19 @@ logger = logging.getLogger(__name__)
 
 
 class InteractiveChatSession:
-    """Sesión interactiva en terminal con ciclo conversacional y métricas."""
+    """Sesión interactiva en terminal con ciclo conversacional y métricas.
+
+    Args:
+        agent: Instancia del agente WikiAgent.
+        manager: Gestor de la base de conocimientos wiki.
+        renderer: Renderizador de consola Rich (opcional).
+        console: Consola Rich (opcional).
+        no_memory: Si True, desactiva la inyección de contexto wiki.
+        network_client: Si se proporciona, la sesión opera en modo NETWORK,
+                        recibiendo inputs desde la Sala de Chat remota en lugar
+                        del teclado. El cliente ya debe estar conectado y con
+                        el handshake completado antes de pasarlo aquí.
+    """
 
     def __init__(
         self,
@@ -32,12 +49,15 @@ class InteractiveChatSession:
         renderer: Optional[ConsoleRenderer] = None,
         console: Optional[Console] = None,
         no_memory: bool = False,
+        network_client=None,   # Optional[AgentNetworkClient] — sin importar para evitar circular
     ):
         self.agent = agent
         self.manager = manager
         self.console = console or Console()
         self.renderer = renderer or ConsoleRenderer(self.console)
         self.no_memory = no_memory
+        self._network_client = network_client
+        self._network_mode = network_client is not None
 
         self.stats: Dict[str, Any] = {
             "tok_s": 0.0,
@@ -48,18 +68,41 @@ class InteractiveChatSession:
         }
         self.turn_number = 0
 
+    # ─── Bucle principal ──────────────────────────────────────────────────────
+
     def start(self):
         """Inicia y mantiene el bucle interactivo hasta /exit o EOF."""
         self.console.clear()
         self.console.print(self.renderer.render_header(self.agent.llm, self.no_memory))
+
+        # Mostrar indicador del modo de entrada activo
+        if self._network_mode:
+            self.console.print(Panel(
+                "[bold cyan]Modo RED activo.[/bold cyan] "
+                "Los inputs se reciben desde la Sala de Chat remota.\n"
+                "[dim]La interfaz de terminal sigue activa para observación. "
+                "Para terminar, cierra el agente o la Sala de Chat.[/dim]",
+                border_style="cyan",
+                title="🌐 Modo Sala de Chat"
+            ))
         self.console.print()
 
         logger.info(
-            "SESIÓN CHAT | INICIADA. Modelo: %s | Memoria: %s",
+            "SESIÓN CHAT | INICIADA. Modelo: %s | Memoria: %s | Modo: %s",
             self.agent.llm.model_name,
-            "DESACTIVADA" if self.no_memory else "ACTIVA"
+            "DESACTIVADA" if self.no_memory else "ACTIVA",
+            "NETWORK" if self._network_mode else "LOCAL"
         )
 
+        if self._network_mode:
+            self._run_network_loop()
+        else:
+            self._run_local_loop()
+
+    # ─── Bucle LOCAL (teclado) ────────────────────────────────────────────────
+
+    def _run_local_loop(self):
+        """Bucle de entrada por teclado (modo original)."""
         while True:
             try:
                 user_input = Prompt.ask("\n[bold green]Tú[/bold green]").strip()
@@ -70,12 +113,146 @@ class InteractiveChatSession:
             if not user_input:
                 continue
 
-            # Despacho de comandos interactivos de la sesión
             if self._handle_session_command(user_input):
                 continue
 
-            # Turno de conversación con el agente
             self._execute_turn(user_input)
+
+    # ─── Bucle NETWORK (Sala de Chat remota) ──────────────────────────────────
+
+    def _run_network_loop(self):
+        """Bucle de entrada desde la Sala de Chat vía red con cola asíncrona de mensajes."""
+        import queue
+        import threading
+        from wiki_agent.network.protocol import MessageType, AgentState
+
+        message_queue = queue.Queue()
+        stop_event = threading.Event()
+
+        def worker_loop():
+            """Hilo trabajador que consume secuencialmente la cola de mensajes."""
+            while not stop_event.is_set():
+                try:
+                    item = message_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                if item is None:
+                    break
+
+                sender, user_input = item
+                remaining = message_queue.qsize()
+
+                # Notificar a la Sala de Chat que el agente pasa a PROCESANDO
+                status_detail = f"Respondiendo a {sender}..." if remaining == 0 else f"Respondiendo a {sender}... ({remaining} en cola)"
+                self._send_network_state(AgentState.PROCESANDO, status_detail)
+
+                # Comandos de sesión también se aceptan desde la red
+                if self._handle_session_command(user_input):
+                    next_state = AgentState.PROCESANDO if message_queue.qsize() > 0 else AgentState.LISTO
+                    self._send_network_state(next_state, "Comando ejecutado")
+                    message_queue.task_done()
+                    continue
+
+                # Formatear el mensaje con el prefijo de emisor si no es humano simple
+                contextualized_input = f"[DE: {sender}]\n{user_input}" if sender != "HUMAN" else user_input
+
+                # Ejecutar turno y capturar resultado
+                result = self._execute_turn_network(contextualized_input)
+
+                if result is not None:
+                    meta = {
+                        "tok_s": self.stats.get("tok_s", 0.0),
+                        "latency": self.stats.get("latency", 0.0),
+                        "ram_mb": self.stats.get("ram_mb", 0.0),
+                        "wiki_count": self.stats.get("wiki_count", 0),
+                    }
+                    self._network_client.send_response(result.response_text, metadata=meta)
+                else:
+                    self._send_network_state(AgentState.ERROR, "Fallo al generar respuesta")
+
+                message_queue.task_done()
+
+                # Si no quedan más mensajes en cola, volver a estado LISTO
+                if message_queue.qsize() == 0:
+                    self._send_network_state(AgentState.LISTO, "Listo para nuevo mensaje")
+
+        # Iniciar hilo de procesamiento de la cola
+        worker_thread = threading.Thread(target=worker_loop, daemon=True, name="ChatSession-Worker")
+        worker_thread.start()
+
+        self.console.print("[dim]⏳ Esperando mensajes desde la Sala de Chat...[/dim]")
+        # Notificar a la Sala de Chat que el agente está LISTO para recibir input
+        self._send_network_state(AgentState.LISTO, "Esperando mensaje...")
+
+        try:
+            while True:
+                try:
+                    msg = self._network_client.receive_message()
+                except KeyboardInterrupt:
+                    self.console.print("\n[dim]Interrumpido por el usuario. Cerrando...[/dim]")
+                    break
+                except Exception as e:
+                    logger.error("Error leyendo mensaje de red: %s", e)
+                    self.console.print(f"\n[bold red]Error de red: {e}[/bold red]")
+                    self._send_network_state(AgentState.ERROR, f"Fallo de conexión: {e}")
+                    break
+
+                if msg is None:
+                    # La Sala de Chat cerró la conexión
+                    self.console.print("\n[bold yellow]La Sala de Chat cerró la conexión.[/bold yellow]")
+                    logger.info("SESIÓN CHAT | Sala de Chat desconectada.")
+                    break
+
+                if msg.type == MessageType.CHAT_MESSAGE:
+                    user_input = msg.payload.get("text", "").strip()
+                    sender = msg.payload.get("sender", "HUMAN")
+                    if not user_input:
+                        continue
+
+                    # Mostrar en terminal lo que llegó desde la red indicando el remitente
+                    sender_display = "Humano (HUMAN)" if sender == "HUMAN" else f"Agente ({sender})"
+                    self.console.print(f"\n[bold green]De [{sender_display}]:[/bold green] {user_input}")
+
+                    # Encolar el mensaje para procesamiento secuencial
+                    message_queue.put((sender, user_input))
+                    q_len = message_queue.qsize()
+                    if q_len > 1:
+                        self.console.print(f"[dim]📥 Mensaje encolado (posición {q_len})[/dim]")
+                        self._send_network_status("queue", f"{q_len} mensajes en cola")
+
+                elif msg.type == MessageType.AGENT_LIST:
+                    agents = msg.payload.get("agents", [])
+                    self._network_client.connected_agents = agents
+                    nombres = [a.get("client_name", "Desconocido") for a in agents]
+                    self.console.print(f"[dim]👥 Agentes presentes en la sala: {', '.join(nombres) if nombres else 'Ninguno'}[/dim]")
+
+                elif msg.type == MessageType.PING:
+                    from wiki_agent.network.protocol import make_pong
+                    if hasattr(self._network_client, "_conn") and self._network_client._conn:
+                        self._network_client._conn.send_message(make_pong())
+        finally:
+            stop_event.set()
+            message_queue.put(None)
+            worker_thread.join(timeout=1.0)
+
+    def _send_network_state(self, state, detail: str = ""):
+        """Envía una actualización del estado canónico del agente (LISTO/PROCESANDO/ERROR)."""
+        if self._network_mode and self._network_client:
+            try:
+                self._network_client.send_state(state, detail)
+            except Exception as e:
+                logger.warning("No se pudo enviar estado formal de red: %s", e)
+
+    def _send_network_status(self, status: str, detail: str = ""):
+        """Envía un mensaje de estado al cliente de red si está en modo red."""
+        if self._network_mode and self._network_client:
+            try:
+                self._network_client.send_status(status, detail)
+            except Exception as e:
+                logger.warning("No se pudo enviar estado de red: %s", e)
+
+    # ─── Comandos de sesión ───────────────────────────────────────────────────
 
     def _handle_session_command(self, cmd: str) -> bool:
         """Procesa comandos especiales del shell interactivo. Retorna True si fue un comando consumido."""
@@ -91,6 +268,24 @@ class InteractiveChatSession:
             self.console.clear()
             self.console.print(self.renderer.render_header(self.agent.llm, self.no_memory))
             self.console.print("[dim]Historial de conversación reiniciado.[/dim]")
+            return True
+
+        if cmd_lower in ("/agents", "agents"):
+            if self._network_mode and self._network_client:
+                agents = getattr(self._network_client, "connected_agents", [])
+                if not agents:
+                    self.console.print("[yellow]No hay otros agentes registrados en la sala actualmente.[/yellow]")
+                else:
+                    self.console.print(f"[bold cyan]Agentes en la sala ({len(agents)}):[/bold cyan]")
+                    for a in agents:
+                        self.console.print(f"- [bold]{a.get('client_name')}[/bold] (Modelo: {a.get('model_name')}) [dim]ID: {a.get('client_id', 'N/A')}[/dim]")
+            else:
+                self.console.print("[yellow]El comando /agents solo está activo en modo red (conectado a una sala).[/yellow]")
+            return True
+
+        if cmd_lower in ("/identify", "identify", "/whoami"):
+            res = self.agent.dispatcher.dispatch("/identify")
+            self.console.print(Panel(res, title="🪪 Identidad del Agente", border_style="cyan"))
             return True
 
         if cmd_lower == "/stats":
@@ -139,8 +334,14 @@ class InteractiveChatSession:
 
         return False
 
+    # ─── Ejecución de turno ───────────────────────────────────────────────────
+
     def _execute_turn(self, user_input: str):
-        """Ejecuta un turno completo de interacción entre el usuario y el agente."""
+        """Ejecuta un turno completo de interacción (modo local — sin retorno)."""
+        self._execute_turn_network(user_input)
+
+    def _execute_turn_network(self, user_input: str) -> Optional[AgentTurnResult]:
+        """Ejecuta un turno completo y retorna el resultado (modo red o local)."""
         self.turn_number += 1
         logger.info("SESIÓN CHAT | === TURNO %d — ENTRADA USUARIO ===", self.turn_number)
         logger.info("SESIÓN CHAT | TURNO %d | INPUT USUARIO: %r", self.turn_number, user_input)
@@ -160,6 +361,8 @@ class InteractiveChatSession:
                     concepts = msg[1]
                     logger.debug("SESIÓN CHAT | STATUS CALLBACK | wiki_tree | concepts=%s", concepts)
                     self.renderer.render_wiki_tree(concepts, self.manager)
+                    if self._network_mode:
+                        self._send_network_status("searching", f"Consultando wiki: {', '.join(concepts[:3])}")
                 elif kind == "thought":
                     logger.debug("SESIÓN CHAT | STATUS CALLBACK | thought procesado en streaming.")
                 elif kind == "cycle_start":
@@ -169,6 +372,8 @@ class InteractiveChatSession:
                     stream_processor.reset_cycle()
                     print(f"\r{' ' * 80}\r", end="", flush=True)
                     self.console.print(f"[dim]🧠 Procesando modelo ({model_name}) - Ciclo {cycle_num}...[/dim]")
+                    if self._network_mode:
+                        self._send_network_status("thinking", f"Ciclo {cycle_num} de razonamiento…")
                 return
 
             logger.debug("SESIÓN CHAT | STATUS CALLBACK | msg=%r", str(msg))
@@ -203,7 +408,7 @@ class InteractiveChatSession:
                 "wiki_count": wiki_total,
             })
 
-            # Imprimir respuesta final limpia del resultado de dominio
+            # Imprimir respuesta final limpia en la terminal
             print(f"\r{' ' * 80}\r", end="", flush=True)
             _print_agent_header()
             print(result.response_text)
@@ -217,8 +422,14 @@ class InteractiveChatSession:
                 self.console.print(f"[dim]⚙️  Comandos ejecutados internamente: {', '.join(result.executed_commands)}[/dim]")
 
             self.renderer.render_turn_metrics(tok_per_sec, elapsed, ram_now, wiki_total)
+
+            if self._network_mode:
+                self._send_network_status("done", "Respuesta lista")
+
             logger.info("SESIÓN CHAT | === TURNO %d — FIN ===", self.turn_number)
             self.console.print()
+
+            return result
 
         except httpx.ConnectError as e:
             logger.error("SESIÓN CHAT | TURNO %d | ConnectError: %s", self.turn_number, e, exc_info=True)
@@ -229,6 +440,10 @@ class InteractiveChatSession:
         except Exception as e:
             logger.error("SESIÓN CHAT | TURNO %d | Error inesperado: %s", self.turn_number, e, exc_info=True)
             self.console.print(f"\n[bold red]Error inesperado: {e}[/bold red]")
+
+        return None
+
+    # ─── Comandos de información ──────────────────────────────────────────────
 
     def _show_stats(self):
         """Muestra una tabla con las estadísticas de la sesión."""
@@ -245,6 +460,7 @@ class InteractiveChatSession:
         table.add_row("Memoria RAM (RSS)", f"{self.stats['ram_mb']:.1f} MB")
         table.add_row("Conceptos en Wiki", str(self.stats["wiki_count"]))
         table.add_row("Tiempo de sesión", f"{mins}m {secs}s")
+        table.add_row("Modo de entrada", "🌐 RED" if self._network_mode else "⌨️  LOCAL")
 
         self.console.print(table)
 
@@ -267,7 +483,6 @@ class InteractiveChatSession:
             self.console.print(f"[bold red]Concepto '{title}' no encontrado.[/bold red]")
             return
         meta = page.metadata
-        from rich.panel import Panel
         self.console.print(Panel(
             f"[bold cyan]Categoría:[/bold cyan] {meta.category}\n"
             f"[bold cyan]Tags:[/bold cyan] {', '.join(meta.tags)}\n\n"

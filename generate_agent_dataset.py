@@ -1,6 +1,64 @@
+import ft2_extra
 import json
 from pathlib import Path
 
+
+
+# ----------------------------------------------------------------
+# Utilidades multi-fuente (añadidas automáticamente)
+# ----------------------------------------------------------------
+import re as _re
+
+_AGENT_NAMES_MS = [
+    "Echo-Pilot-12", "Sentinel-Node-03", "Nexus-Core-88",
+    "Apex-Scribe-44", "Vector-Mind-21", "Cortex-Pilot-09",
+    "Kinetics-Beacon-14", "Matrix-Scribe-77", "Nova-Sentinel-33",
+    "Hyper-Oracle-19", "Atlas-Core-01", "Nexus-Pilot-42",
+    "Echo-Weaver-99", "Sentinel-Mind-07", "Prism-Oracle-55",
+]
+
+
+def _ms_agent(idx):
+    return _AGENT_NAMES_MS[idx % len(_AGENT_NAMES_MS)]
+
+
+def _ms_patch_thought(gpt_text, agent_name, suffix):
+    """Inserta reconocimiento de emisor como punto 1 en <thought> y renumera."""
+    t_start = gpt_text.find("<thought>")
+    t_end = gpt_text.find("</thought>")
+    if t_start == -1 or t_end == -1:
+        return gpt_text
+    thought_body = gpt_text[t_start + 9:t_end]
+    lines = thought_body.split("\n")
+    has_numbered = any(_re.match(r"^\d+\.", l.strip()) for l in lines if l.strip())
+    sender_line = f"1. Emisor Agente ({agent_name}). {suffix}"
+    if has_numbered:
+        new_lines = []
+        for line in lines:
+            m = _re.match(r"^(\d+)\. (.+)", line.strip())
+            if m:
+                new_lines.append(f"{int(m.group(1)) + 1}. {m.group(2)}")
+            else:
+                new_lines.append(line)
+        new_body = "\n".join([sender_line] + new_lines)
+    else:
+        new_body = sender_line + "\n" + thought_body
+    return gpt_text[:t_start + 9] + new_body + gpt_text[t_end:]
+
+
+def _ms_apply(examples, conversions):
+    """Aplica prefijos de agente y parchea thoughts."""
+    for i, (idx, suffix) in enumerate(conversions):
+        if idx >= len(examples):
+            continue
+        convs = examples[idx]["conversations"]
+        if convs[1]["value"].startswith("[DE:"):
+            continue
+        name = _ms_agent(i)
+        convs[1]["value"] = f"[DE: {name}]\n{convs[1]['value']}"
+        convs[2]["value"] = _ms_patch_thought(convs[2]["value"], name, suffix)
+    return examples
+# ----------------------------------------------------------------
 
 def create_examples():
     examples = []
@@ -28,6 +86,8 @@ def create_examples():
             "- Buscar conceptos en mi base de conocimientos (/search)\n"
             "- Guardar o actualizar conceptos con relaciones semánticas (/save, /edit)\n"
             "- Eliminar entradas obsoletas (/delete)\n"
+            "- Planificar procesos cognitivos por tareas (/task_add, /task_done, /task_list)\n"
+            "- Identificarme como agente en red (/identify)\n"
             "¿De qué quieres hablar o qué información quieres registrar?\n"
             "</response>\n"
             "<commands>\n"
@@ -840,6 +900,28 @@ def create_examples():
             {"from": "gpt", "value": gpt_val}
         ]})
 
+        # Cargar 49 ejemplos complementarios para alcanzar exactamente 100
+    examples.extend(ft2_extra.get_ft2_extra_examples())
+    assert len(examples) == 100, f"Error: {len(examples)} != 100"
+    # Multi-source: conversiones de agente remitente
+    _ms_apply(examples, [
+        (1,  'Consulta tecnica. Tono conciso.'),
+        (6,  'Consulta directa. Tono tecnico.'),
+        (10, 'Comparativa tecnica delegada.'),
+        (26, 'Busqueda tecnica delegada.'),
+        (31, 'Consulta conceptual delegada.'),
+        (34, 'Consulta tecnica de red.'),
+        (36, 'Consulta de infra. Tono tecnico.'),
+        (41, 'Consulta de relaciones conceptuales.'),
+        (43, 'Consulta de grafo conceptual.'),
+        (46, 'Consulta de conexiones conceptuales.'),
+        (66, 'Consulta sobre procesamiento de eventos.'),
+        (82, 'Busqueda de protocolo de despliegue.'),
+        (85, 'Busqueda delegada sobre dead letter queues.'),
+        (90, 'Consulta sobre rollback en produccion.'),
+        (93, 'Busqueda de protocolo de pruebas.'),
+        (99, 'Solicitud de manual DRP.'),
+    ])
     return examples
 
 

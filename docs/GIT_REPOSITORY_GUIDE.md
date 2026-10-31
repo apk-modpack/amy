@@ -18,10 +18,13 @@ Este documento describe la estructura, políticas de exclusión y flujo de traba
 Para mantener el repositorio ágil, seguro y por debajo de los límites de cuota de GitHub, se han establecido reglas estrictas de exclusión:
 
 ### Archivos Rastreados (En el Repositorio):
-- **Código Fuente (`src/`):** Toda la lógica del sistema (`core`, `agent`, `ui`, `llm`, `backends`, `tools`).
+- **Código Fuente (`src/`):** Toda la lógica del sistema (`core`, `agent`, `ui`, `llm`, `backends`, `tools`, `network`).
+- **GUI de la Sala de Chat:** `src/wiki_agent/chat_room.py`.
 - **Generadores de Datasets:** `generate_ft1_dataset.py`, `generate_agent_dataset.py`, `generate_ft3_dataset.py`, `build_cumulative_dataset.py`.
-- **Documentación Técnica (`docs/` y `README.md`):** Arquitectura, guías de fine-tuning, especificaciones MCP y roadmap.
+- **Documentación Técnica (`docs/` y `README.md`):** Arquitectura, guías de fine-tuning, especificaciones MCP, guía de red y roadmap.
 - **Configuraciones de Entorno:** `config.yaml`, `pyproject.toml`, `mcp_config.json`, plantillas `Modelfile`.
+- **Scripts de lanzamiento:** `iniciar_wiki_agent.bat`, `iniciar_sala_de_chat.bat`, `iniciar_agente_modo_red.bat`.
+- **Tests:** `tests/` (incluidos los nuevos tests de red `test_network.py`).
 - **Estructura Base de Memoria:** Esquemas base y archivos estructurales XML limpios en `data/wiki/`.
 
 ### Archivos Ignorados (Excluidos):
@@ -87,3 +90,8 @@ git pull origin main
 
 Recuerda que tras hacer cambios y confirmar en Git en el entorno de desarrollo, se deben sincronizar los archivos de código fuente y documentación con el entorno de pruebas `E:\IA` siguiendo la [Guía de Entornos](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/docs/ENVIRONMENTS_AND_SYNC.md).
 
+El script de sincronización de `ENVIRONMENTS_AND_SYNC.md` incluye los nuevos ficheros introducidos en la Iteración 10:
+- `src/wiki_agent/network/` — módulo de red completo.
+- `src/wiki_agent/chat_room.py` — GUI de la Sala de Chat.
+- `*.bat` — launchers actualizados e incorporados.
+- `tests/test_network.py` — tests de red.

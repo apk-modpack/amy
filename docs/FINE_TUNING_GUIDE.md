@@ -21,51 +21,52 @@ Llama 3.2 (Base) + dataset_cumulative_vN.jsonl (ShareGPT) ──[Unsloth en Cola
 
 ## 2. Desglose de los Módulos de Fine-Tuning
 
-### FT1: Estándares de Comunicación CLI y Micro-Formato XML
+### FT1: Estándares de Comunicación CLI y Micro-Formato XML (100 Ejemplos)
 * **Generador:** [`generate_ft1_dataset.py`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/generate_ft1_dataset.py)
 * **Dataset generado:** `data/exports/dataset_ft1_cli_standards.jsonl`
-* **Objetivo:** Forzar la estructura de salida y sintaxis base de la memoria.
+* **Objetivo:** Forzar la estructura de salida, comandos canónicos y auto-identificación.
 
 #### Habilidades entrenadas:
-- **Envoltorios de salida estrictos:** Toda respuesta debe componerse de los bloques canónicos:
-  ```xml
-  <response>
-  ... mensaje al usuario ...
-  </response>
-  <commands>
-  ... llamadas a herramientas ...
-  </commands>
-  ```
-- **Catálogo de comandos CLI:** Sintaxis precisa de `/search <termino>`, `/save <XML>`, `/edit <XML>`, `/delete <titulo>`.
-- **Micro-formato XML semántico:** Estructuración de conceptos con etiquetas `<definition>`, `<sections>` y relaciones tipadas en `<relations>` (`is_a`, `part_of`, `relates_to`, `depends_on`).
+- **Envoltorios de salida estrictos:** Toda respuesta debe componerse de los bloques canónicos `<response>` y `<commands>`.
+- **Catálogo de comandos CLI:** Sintaxis precisa de `/search <termino>`, `/save <XML>`, `/edit <XML>`, `/delete <titulo>`, `/identify`.
+- **Identidad de agente y regla HUMAN:** Verificación de tarjeta de identidad con `/identify` y rechazo estricto del nombre reservado `HUMAN`.
+- **Micro-formato XML semántico:** Estructuración de conceptos con etiquetas `<definition>`, `<sections>` y relaciones tipadas en `<relations>`.
 
 ---
 
-### FT2: Razonamiento ReAct Multi-Ciclo (Reasoning + Acting)
+### FT2: Razonamiento ReAct Multi-Ciclo (Reasoning + Acting) (100 Ejemplos)
 * **Generador:** [`generate_agent_dataset.py`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/generate_agent_dataset.py)
 * **Dataset generado:** `data/exports/dataset_ft2_agent_react.jsonl`
-* **Objetivo:** Dotar al modelo de capacidad de pensamiento autónomo antes de actuar.
+* **Objetivo:** Dotar al modelo de capacidad de pensamiento autónomo antes de actuar y discriminación de emisores.
 
 #### Habilidades entrenadas:
-- **Etiqueta `<thought>` (Chain-of-Thought):** El modelo explicita su razonamiento interno paso a paso antes de formular la respuesta o los comandos.
-- **Ciclo ReAct Multi-Turno:**
-  1. *Turno 1:* El usuario hace una pregunta -> El agente razona (`<thought>`) -> Emite una búsqueda en `<commands>`.
-  2. *Turno 2:* El motor inyecta el resultado de la búsqueda -> El agente razona con el nuevo contexto -> Emite la respuesta final al usuario.
-- **Autonomía selectiva:** Distingue cuándo una pregunta es trivial (saludo, capacidad general) y responde directamente sin invocar comandos innecesarios.
+- **Etiqueta `<thought>` (Chain-of-Thought):** El modelo explicita su razonamiento interno paso a paso.
+- **Ciclo ReAct Multi-Turno:** Pensamiento, búsqueda/lectura intermedia y síntesis final.
+- **Conciencia del emisor:** Razona de forma diferenciada si el mensaje proviene de `HUMAN` o de otro agente compañero (`[DE: <Agente>]`).
 
 ---
 
-### FT3: Patrones Estructurados de Guardado y Corrección de Fallos
+### FT3: Patrones Estructurados de Guardado y Corrección de Fallos (100 Ejemplos)
 * **Generador:** [`generate_ft3_dataset.py`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/generate_ft3_dataset.py)
 * **Dataset generado:** `data/exports/dataset_ft3_structured_saves.jsonl`
 * **Objetivo:** Robustez operativa, eliminación de alucinaciones y adhesión a validaciones.
 
 #### Habilidades entrenadas:
-- **Patrón limpio de guardado:** No mezclar comentarios conversacionales dentro de `<response>` durante un `/save` o `/edit`. La definición conceptual reside exclusivamente dentro del comando XML.
-- **Separación de capas narrativas:** Evita la fuga de etiquetas XML de la base de conocimientos dentro del texto conversacional humano.
-- **Eficiencia en memoria:** Evita invocar `/search` si la información ya vino precargada en el bloque de contexto inyectado (`--- MEMORIA WIKI ---`).
-- **Recuperación ante rechazo del validador:** Si el backend rechaza una definición XML por errores sintácticos, el modelo analiza el error devuelto y emite una versión corregida en el siguiente ciclo.
-- **Uso preciso de `/read` vs `/search`:** Usar `/read` directamente cuando el título exacto del concepto ya es conocido.
+- **Cero frases de intención:** Prohibición estricta de "Voy a..." o comentarios dentro de `<response>` durante un `/save` o `/edit`.
+- **Prohibición de guardado en consultas informativas:** Si el usuario solo pregunta, no se emite `/save` ni `/edit`.
+- **Recuperación ante rechazo del validador:** Rectificación inmediata con XML puro tras error del backend.
+
+---
+
+### FT4: Interacción Inter-Agente vs Humano (100 Ejemplos)
+* **Generador:** [`generate_ft4_multiagent_dataset.py`](file:///C:/Users/ENEKO/Desktop/SAUCE/IA/generate_ft4_multiagent_dataset.py)
+* **Dataset generado:** `data/exports/dataset_ft4_multiagent.jsonl`
+* **Objetivo:** Protocolo de red colaborativo, sincronización entre agentes y respeto al rol del operador humano.
+
+#### Habilidades entrenadas:
+- **Diferenciación de registro comunicativo:** Respuestas pedagógicas y cercanas para `HUMAN`; respuestas técnicas, precisas y concisas para otros agentes.
+- **Sincronización inter-agente:** Peticiones de verificación, intercambio de conceptos y consultas de grafos wiki entre IAs.
+- **Presencia y protocolo:** Uso de `/identify`, consulta de participantes con `/agents` y respeto absoluto a la prioridad humana.
 
 ---
 
@@ -73,26 +74,27 @@ Llama 3.2 (Base) + dataset_cumulative_vN.jsonl (ShareGPT) ──[Unsloth en Cola
 
 | Versión Modelo | Dataset Acumulativo | Componentes Integrados | Novedades Clave |
 |---|---|---|---|
-| **v0.1** | `dataset_cumulative_v1.jsonl` | FT1 | Formato CLI y XML reactivo directo sin `<thought>`. |
-| **v0.2** | `dataset_cumulative_v2.jsonl` | FT1 + FT2 | Soporte de bucle ReAct multi-ciclo y pensamiento `<thought>`. |
-| **v0.3** | `dataset_cumulative_v3.jsonl` | FT1 + FT2 + FT3 | Guardado limpio, validación de esquemas y recuperación ante fallos. |
+| **v0.1** | `dataset_cumulative_v1.jsonl` | FT1 (38 ej.) | Formato CLI y XML reactivo directo sin `<thought>`. |
+| **v0.2** | `dataset_cumulative_v2.jsonl` | FT1 + FT2 (89 ej.) | Soporte de bucle ReAct multi-ciclo y pensamiento `<thought>`. |
+| **v0.3** | `dataset_cumulative_v3.jsonl` | FT1 + FT2 + FT3 (109 ej.) | Guardado limpio, validación de esquemas y recuperación ante fallos. |
+| **v0.4** | `dataset_cumulative_v4.jsonl` | FT1 + FT2 + FT3 + FT4 (**400 ej.**) | Simetría de 100 ej. por módulo, multi-agente, /identify y regla HUMAN. (**Activo**) |
 
 ---
 
 ## 4. Pipeline de Generación y Construcción
 
-Para generar el dataset maestro unificado:
+Para generar el dataset maestro unificado v4 (400 ejemplos):
 
 ```bash
-# Ejecutar la generación completa de todos los parciales y el acumulativo v3
+# Ejecutar la generación completa de todos los parciales y el acumulativo v4
 python build_cumulative_dataset.py
 ```
 
 ### Proceso Interno de `CumulativeDatasetBuilder`:
-1. **Ejecución secuencial:** Lanza los métodos `main()` de `generate_ft1_dataset.py`, `generate_agent_dataset.py` y `generate_ft3_dataset.py`.
+1. **Ejecución secuencial:** Lanza los métodos `main()` de `generate_ft1_dataset.py`, `generate_agent_dataset.py`, `generate_ft3_dataset.py` y `generate_ft4_multiagent_dataset.py`.
 2. **Normalización a ShareGPT:** Convierte todos los esquemas al estándar de conversaciones de OpenAI/ShareGPT.
 3. **Deduplicación criptográfica:** Calcula un hash MD5 de cada conversación para evitar redundancias.
-4. **Balanceo:** Clasifica los patrones (ReAct vs Comandos directos) y exporta `data/exports/dataset_cumulative_v3.jsonl`.
+4. **Balanceo:** Clasifica los patrones y exporta `data/exports/dataset_cumulative_v4.jsonl` con exactamente 400 ejemplos balanceados.
 
 ---
 

@@ -1,3 +1,4 @@
+﻿import ft3_extra
 """Generador de Dataset FT3: Patrones de Guardado Correcto y Correccion de Fallos.
 
 Entrena al modelo en:
@@ -48,6 +49,63 @@ def _gpt(thought, response, commands=""):
 def _conv(*turns):
     return {"conversations": list(turns)}
 
+
+
+# ----------------------------------------------------------------
+# Utilidades multi-fuente (aÃ±adidas automÃ¡ticamente)
+# ----------------------------------------------------------------
+import re as _re
+
+_AGENT_NAMES_MS = [
+    "Echo-Pilot-12", "Sentinel-Node-03", "Nexus-Core-88",
+    "Apex-Scribe-44", "Vector-Mind-21", "Cortex-Pilot-09",
+    "Kinetics-Beacon-14", "Matrix-Scribe-77", "Nova-Sentinel-33",
+    "Hyper-Oracle-19", "Atlas-Core-01", "Nexus-Pilot-42",
+    "Echo-Weaver-99", "Sentinel-Mind-07", "Prism-Oracle-55",
+]
+
+
+def _ms_agent(idx):
+    return _AGENT_NAMES_MS[idx % len(_AGENT_NAMES_MS)]
+
+
+def _ms_patch_thought(gpt_text, agent_name, suffix):
+    """Inserta reconocimiento de emisor como punto 1 en <thought> y renumera."""
+    t_start = gpt_text.find("<thought>")
+    t_end = gpt_text.find("</thought>")
+    if t_start == -1 or t_end == -1:
+        return gpt_text
+    thought_body = gpt_text[t_start + 9:t_end]
+    lines = thought_body.split("\n")
+    has_numbered = any(_re.match(r"^\d+\.", l.strip()) for l in lines if l.strip())
+    sender_line = f"1. Emisor Agente ({agent_name}). {suffix}"
+    if has_numbered:
+        new_lines = []
+        for line in lines:
+            m = _re.match(r"^(\d+)\. (.+)", line.strip())
+            if m:
+                new_lines.append(f"{int(m.group(1)) + 1}. {m.group(2)}")
+            else:
+                new_lines.append(line)
+        new_body = "\n".join([sender_line] + new_lines)
+    else:
+        new_body = sender_line + "\n" + thought_body
+    return gpt_text[:t_start + 9] + new_body + gpt_text[t_end:]
+
+
+def _ms_apply(examples, conversions):
+    """Aplica prefijos de agente y parchea thoughts."""
+    for i, (idx, suffix) in enumerate(conversions):
+        if idx >= len(examples):
+            continue
+        convs = examples[idx]["conversations"]
+        if convs[1]["value"].startswith("[DE:"):
+            continue
+        name = _ms_agent(i)
+        convs[1]["value"] = f"[DE: {name}]\n{convs[1]['value']}"
+        convs[2]["value"] = _ms_patch_thought(convs[2]["value"], name, suffix)
+    return examples
+# ----------------------------------------------------------------
 
 def create_examples():
     ex = []
@@ -155,7 +213,7 @@ def create_examples():
                 "2. La informacion ya esta en MEMORIA WIKI bajo [[Scrum]].\n"
                 "3. Respondo en lenguaje natural, SIN etiquetas XML en el texto.\n"
                 "4. PROHIBIDO <relation...> en el texto de respuesta.\n"
-                "5. PROHIBIDO /save — es consulta, no aportacion nueva."
+                "5. PROHIBIDO /save â€” es consulta, no aportacion nueva."
             ),
             response=(
                 "El [[Scrum]] se sustenta en tres pilares fundamentales:\n\n"
@@ -233,7 +291,7 @@ def create_examples():
                 "1. El usuario pregunta por Docker y Kubernetes.\n"
                 "2. La memoria wiki tiene [[Docker]] pero NO Kubernetes.\n"
                 "3. Solo busco lo que NO esta en memoria: /search 'Kubernetes'.\n"
-                "4. NO repito la busqueda de Docker — ya lo tengo en el contexto."
+                "4. NO repito la busqueda de Docker â€” ya lo tengo en el contexto."
             ),
             response="Tengo informacion sobre [[Docker]] en memoria. Busco Kubernetes para la comparativa.",
             commands='/search "Kubernetes"',
@@ -251,7 +309,7 @@ def create_examples():
             thought=(
                 "1. Consulta sobre marcos agiles.\n"
                 "2. La memoria wiki tiene [[Metodologia Agil]] con Scrum y Kanban listados.\n"
-                "3. PROHIBIDO /search — tengo la informacion completa con sus marcos.\n"
+                "3. PROHIBIDO /search â€” tengo la informacion completa con sus marcos.\n"
                 "4. Respondo directamente."
             ),
             response=(
@@ -318,7 +376,7 @@ def create_examples():
         ),
         _gpt(
             thought=(
-                "1. El sistema rechazo /save porque emiti 'Voy a registrar...' — frase de intencion.\n"
+                "1. El sistema rechazo /save porque emiti 'Voy a registrar...' â€” frase de intencion.\n"
                 "2. Corrijo INMEDIATAMENTE: definicion tecnica completa en <definition>.\n"
                 "3. Vuelvo a emitir /save con el contenido valido."
             ),
@@ -364,7 +422,7 @@ def create_examples():
         ),
         _gpt(
             thought=(
-                "1. Sistema rechazo /edit por 'Voy a profundizar...' — frase de intencion.\n"
+                "1. Sistema rechazo /edit por 'Voy a profundizar...' â€” frase de intencion.\n"
                 "2. Corrijo INMEDIATAMENTE con definicion enciclopedica completa en <definition>.\n"
                 "3. Anado la relacion 'relates_to Recursos Humanos' en <relations>."
             ),
@@ -401,7 +459,7 @@ def create_examples():
             thought=(
                 "1. Tengo [[Arquitectura Hexagonal]] en memoria pero solo resumida.\n"
                 "2. El usuario pide detalles COMPLETOS: capas, reglas.\n"
-                "3. Uso /read — ya se el nombre exacto, no necesito /search.\n"
+                "3. Uso /read â€” ya se el nombre exacto, no necesito /search.\n"
                 "4. /read devuelve el contenido completo incluyendo todas las secciones."
             ),
             response="Tengo el concepto registrado. Leo su contenido completo para los detalles.",
@@ -415,7 +473,7 @@ def create_examples():
         _gpt(
             thought=(
                 "1. Pregunta sobre relacion entre DDD y Arquitectura Hexagonal.\n"
-                "2. No tengo ninguno en memoria — busco ambos."
+                "2. No tengo ninguno en memoria â€” busco ambos."
             ),
             response="Buscando ambos conceptos para darte una respuesta precisa.",
             commands='/search "Domain Driven Design"\n/search "Arquitectura Hexagonal"',
@@ -432,7 +490,7 @@ def create_examples():
             thought=(
                 "1. Tengo resultados para ambos conceptos.\n"
                 "2. Informacion suficiente para explicar la relacion.\n"
-                "3. Respondo directamente. PROHIBIDO /save — es consulta informativa."
+                "3. Respondo directamente. PROHIBIDO /save â€” es consulta informativa."
             ),
             response=(
                 "[[Domain Driven Design (DDD)]] y [[Arquitectura Hexagonal]] son complementarios:\n\n"
@@ -475,7 +533,7 @@ def create_examples():
         _human("Explicame que es el Principio de Responsabilidad Unica (SRP)."),
         _gpt(
             thought=(
-                "1. El usuario pide una explicacion — consulta informativa.\n"
+                "1. El usuario pide una explicacion â€” consulta informativa.\n"
                 "2. No esta en memoria pero conozco el concepto.\n"
                 "3. PROHIBIDO /save: el usuario no pidio registrar nada.\n"
                 "4. Solo respondo de forma clara y asertiva."
@@ -500,7 +558,7 @@ def create_examples():
         _human("Anade al concepto de 'Blockchain' que es inmutable y descentralizado."),
         _gpt(
             thought=(
-                "1. El usuario quiere anadir info a 'Blockchain' — no esta en memoria.\n"
+                "1. El usuario quiere anadir info a 'Blockchain' â€” no esta en memoria.\n"
                 "2. Busco primero para no perder la definicion existente."
             ),
             response="Buscando el concepto 'Blockchain' antes de actualizarlo.",
@@ -546,7 +604,7 @@ def create_examples():
         _human("Tienes informacion sobre Git en la wiki?"),
         _gpt(
             thought=(
-                "1. Consulta sobre Git — no esta en memoria.\n"
+                "1. Consulta sobre Git â€” no esta en memoria.\n"
                 "2. Busco antes de responder."
             ),
             response="Buscando en la wiki que tenemos sobre Git.",
@@ -560,8 +618,8 @@ def create_examples():
         _gpt(
             thought=(
                 "1. La busqueda devolvio [[Git]] con informacion completa.\n"
-                "2. El usuario solo pregunto si tenia info — no pidio guardar nada nuevo.\n"
-                "3. PROHIBIDO /save — no hay datos nuevos que registrar."
+                "2. El usuario solo pregunto si tenia info â€” no pidio guardar nada nuevo.\n"
+                "3. PROHIBIDO /save â€” no hay datos nuevos que registrar."
             ),
             response=(
                 "Si, tengo [[Git]] registrado. Es el sistema de control de versiones distribuido\n"
@@ -579,7 +637,7 @@ def create_examples():
         _gpt(
             thought=(
                 "1. El usuario aporta datos nuevos sobre Git: branching y GitHub.\n"
-                "2. Es una peticion explicita de actualizacion — /edit justificado.\n"
+                "2. Es una peticion explicita de actualizacion â€” /edit justificado.\n"
                 "3. Redacto la definicion enriquecida con la info existente mas la nueva.\n"
                 "4. Contenido estructurado directo en <definition>, sin frases de anuncio."
             ),
@@ -604,7 +662,7 @@ def create_examples():
         )
     ))
 
-    # H3: /read vs /search — usar /read cuando se conoce el nombre exacto
+    # H3: /read vs /search â€” usar /read cuando se conoce el nombre exacto
     ex.append(_conv(
         _wiki(
             "[[Clean Architecture]]: Patron que separa el sistema en capas concentricas con\n"
@@ -615,14 +673,14 @@ def create_examples():
             thought=(
                 "1. Tengo [[Clean Architecture]] pero solo resumida en memoria.\n"
                 "2. El usuario pide detalles COMPLETOS.\n"
-                "3. Uso /read — ya se el nombre exacto del concepto, no necesito /search."
+                "3. Uso /read â€” ya se el nombre exacto del concepto, no necesito /search."
             ),
             response="Leyendo el contenido completo de Clean Architecture para los detalles.",
             commands='/read "Clean Architecture"',
         )
     ))
 
-    # H4: multiples conceptos nuevos en un turno — guardar todos
+    # H4: multiples conceptos nuevos en un turno â€” guardar todos
     ex.append(_conv(
         _sys(),
         _human(
@@ -656,6 +714,29 @@ def create_examples():
         )
     ))
 
+        # Cargar 80 ejemplos complementarios para alcanzar exactamente 100
+    ex.extend(ft3_extra.get_ft3_extra_examples(_conv, _sys, _wiki, _human, _gpt))
+    assert len(ex) == 100, f"Error: {len(ex)} != 100"
+    # Multi-source: conversiones de agente remitente
+    _ms_apply(ex, [
+        (20, 'Transmite datos para persistencia.'),
+        (22, 'Transmite configuracion para guardar.'),
+        (23, 'Transmite spec de protocolo.'),
+        (25, 'Transmite dependencias de broker.'),
+        (28, 'Transmite spec de compatibilidad S3.'),
+        (30, 'Transmite spec de protocolo NDJSON.'),
+        (31, 'Transmite estructura de token JWT.'),
+        (34, 'Transmite operacion Git avanzada.'),
+        (60, 'Delega actualizacion de spec QUIC.'),
+        (62, 'Delega actualizacion de feature CORS.'),
+        (63, 'Delega optimizacion de build Docker.'),
+        (68, 'Delega extension de protocolo MQTT.'),
+        (72, 'Delega adicion de gestor de paquetes Helm.'),
+        (76, 'Delega actualizacion de compresion HPACK.'),
+        (79, 'Delega adicion de patron Saga distribuido.'),
+        (82, 'Transmite spec de redes overlay Docker.'),
+        (87, 'Transmite config de service discovery.'),
+    ])
     return ex
 
 

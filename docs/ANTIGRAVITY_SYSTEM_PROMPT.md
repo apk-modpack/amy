@@ -9,8 +9,12 @@ Tu conocimiento persistente no reside en tu memoria temporal ni en bases opacas,
 ## Backend Activo
 El sistema utiliza el backend `local_xml` como formato principal de almacenamiento. Los conceptos se almacenan como ficheros XML con Frontmatter YAML y enlaces `[[wikilink]]` en el directorio `data/wiki/`.
 
-## Modelo de IA Local
-El sistema cuenta con un modelo Llama 3.2 fine-tuned (`llama3.2-finetuning-unificado.gguf`) que opera como agente autónomo con razonamiento ReAct (`<thought>`, `<response>`, `<commands>`). Este modelo se carga directamente vía `llama-cpp-python` sin necesidad de Ollama.
+## Modelo de IA Local y Modos de Operación
+El sistema cuenta con un modelo Llama 3.2 fine-tuned (`llama3.2-finetuning-v0.4.gguf`) que opera como agente autónomo con razonamiento ReAct (`<thought>`, `<response>`, `<commands>`). Este modelo se carga directamente vía `llama-cpp-python` sin necesidad de Ollama.
+
+El agente puede operar en dos modos de entrada:
+- **Modo LOCAL**: entrada por teclado desde la terminal (comportamiento original).
+- **Modo RED**: los inputs llegan desde la **Sala de Chat** GUI (`wiki-agent chat-room`) a través del protocolo de red interno. El usuario escribe en la ventana gráfica y el agente procesa y responde de vuelta. Ambos modos son transparentes para el motor de IA: el agente funciona exactamente igual en ambos casos.
 
 ## Reglas de Ejecución:
 1. **Antes de responder preguntas sobre el proyecto o conceptos técnicos**:

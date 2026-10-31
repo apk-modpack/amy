@@ -37,7 +37,7 @@ def get_llm_backend(config: Dict[str, Any]) -> LLMBackend:
 
     if provider == "llamacpp":
         return LlamaCppBackend(
-            model_path=llm_cfg.get("model_path", "./models/llama3.2-finetuning-v0.3.gguf"),
+            model_path=llm_cfg.get("model_path", "./models/llama3.2-finetuning-v0.4.gguf"),
             temperature=llm_cfg.get("temperature", 1.5),
             min_p=llm_cfg.get("min_p", 0.1),
             n_ctx=llm_cfg.get("n_ctx", 4096),

@@ -22,9 +22,12 @@ dataset_ft{N}_{nombre_descriptivo}.jsonl
 
 | Archivo | Descripción | Generador |
 |---------|-------------|-----------|
-| `dataset_ft1_cli_standards.jsonl` | Estándares de comunicación CLI y micro-formato XML (reactivo directo) | `generate_ft1_dataset.py` |
-| `dataset_ft2_agent_react.jsonl` | Razonamiento ReAct con `<thought>` y herramientas multi-ciclo | `generate_agent_dataset.py` |
-| `dataset_ft3_structured_saves.jsonl` | Patrones correctos de /save y /edit, no mezclar XML en narrativa, no /search si hay contexto, recuperación tras rechazo del validador | `generate_ft3_dataset.py` |
+| `dataset_ft1_cli_standards.jsonl` | Estándares de comunicación CLI, micro-formato XML y auto-identificación (100 ej.) | `generate_ft1_dataset.py` |
+| `dataset_ft2_agent_react.jsonl` | Razonamiento ReAct con `<thought>`, herramientas y conciencia de emisor (100 ej.) | `generate_agent_dataset.py` |
+| `dataset_ft3_structured_saves.jsonl` | Patrones limpios de /save y /edit, cero frases de intención, recuperación tras rechazo (100 ej.) | `generate_ft3_dataset.py` |
+| `dataset_ft4_multiagent.jsonl` | Protocolo inter-agente vs humano, sincronización y respeto al rol HUMAN (100 ej.) | `generate_ft4_multiagent_dataset.py` |
+| `dataset_ft5_tasklist.jsonl` | Proceso cognitivo: respuesta directa vs planificación estructurada con `<tasks>` y `/task_*` (100 ej.) | `generate_ft5_tasklist_dataset.py` |
+| `dataset_ft6_wiki_grounding.jsonl` | Wiki-Grounding: desconfianza de memoria paramétrica, offloading de contexto y navegación en grafo (100 ej.) | `generate_ft6_wiki_grounding_dataset.py` |
 
 ### Datasets Acumulativos (para entrenar)
 ```
@@ -33,8 +36,11 @@ dataset_cumulative_v{N}.jsonl
 
 | Archivo | Contenido | Versión |
 |---------|-----------|---------|
-| `dataset_cumulative_v2.jsonl` | FT1 + FT2 fusionado y deduplicado | Anterior |
-| `dataset_cumulative_v3.jsonl` | FT1 + FT2 + FT3 fusionado y deduplicado | **Actual** |
+| `dataset_cumulative_v2.jsonl` | FT1 + FT2 fusionado y deduplicado | Histórico |
+| `dataset_cumulative_v3.jsonl` | FT1 + FT2 + FT3 fusionado | Histórico |
+| `dataset_cumulative_v4.jsonl` | FT1 + FT2 + FT3 + FT4 (400 ejemplos balanceados) | Histórico |
+| `dataset_cumulative_v5.jsonl` | FT1 + FT2 + FT3 + FT4 + FT5 (500 ejemplos balanceados) | Anterior |
+| `dataset_cumulative_v6.jsonl` | FT1 + FT2 + FT3 + FT4 + FT5 + FT6 (600 ejemplos balanceados) | **Actual** |
 
 ### Modelos Resultantes
 ```
@@ -44,7 +50,10 @@ llama3.2-{identificador}.gguf
 | Archivo | Origen |
 |---------|--------|
 | `llama3.2-finetuning-unificado.gguf` | Entrenado con `dataset_cumulative_v2.jsonl` |
-| `llama3.2-cumulative_v3.gguf` | **Próxima versión** — entrenar con `dataset_cumulative_v3.jsonl` |
+| `llama3.2-cumulative_v3.gguf` | Entrenado con `dataset_cumulative_v3.jsonl` |
+| `llama3.2-cumulative_v4.gguf` | Entrenado con `dataset_cumulative_v4.jsonl` |
+| `llama3.2-cumulative_v5.gguf` | Entrenado con `dataset_cumulative_v5.jsonl` |
+| `llama3.2-cumulative_v6.gguf` | **Próxima versión** — entrenar con `dataset_cumulative_v6.jsonl` |
 
 ## 3. Formato Canónico: ShareGPT
 
